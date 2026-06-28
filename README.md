@@ -101,4 +101,7 @@ curl http://localhost:8080/admin/metrics/dau
 - **Core Algorithm**: Located in [`sliding_window_rate_limit.lua`](src/main/resources/scripts/sliding_window_rate_limit.lua). Runs atomically on Redis to avoid concurrency race conditions.
 - **Client Tier Management**: Managed inside [`UserTier.java`](src/main/java/com/example/ratelimiter/model/UserTier.java) and [`ApiKeyService.java`](src/main/java/com/example/ratelimiter/service/ApiKeyService.java).
 - **Interception Middleware**: Located in [`RateLimitInterceptor.java`](src/main/java/com/example/ratelimiter/interceptor/RateLimitInterceptor.java). Determines client tier, maps the correct quotas, and filters traffic.
+  - *Local Failover Resiliency*: If Redis is offline, the interceptor catches the exception and falls back to a local in-memory sliding window log (using `ConcurrentSkipListSet`). This keeps the server protected from traffic spikes during database outages.
+  - *Memory Management*: A background scheduler runs every 5 minutes to evict old timestamps and clean up idle cache keys, preventing memory leaks.
 - **Telemetry**: Located in [`AnalyticsListener.java`](src/main/java/com/example/ratelimiter/listener/AnalyticsListener.java). Observes approved requests asynchronously (`@Async`) and registers them in Redis HyperLogLog.
+

@@ -12,12 +12,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.io.PrintWriter;
 import java.util.Collections;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 @Slf4j
 @Component
@@ -29,7 +32,9 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private final RateLimitProperties rateLimitProperties;
     private final ApiKeyService apiKeyService;
     private final ApplicationEventPublisher eventPublisher;
+    
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
+    private final ConcurrentHashMap<String, ConcurrentSkipListSet<Long>> localCache = new ConcurrentHashMap<>();
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -73,10 +78,46 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             sendThrottledResponse(response, tier, limit, config.getWindowMs());
             return false;
         } catch (Exception e) {
-            // Fail-open logic to prevent Redis availability issues from blocking API traffic
-            log.error("Error executing rate limit script in Redis for key: {}", redisKey, e);
+            // Failover to local in-memory sliding window log during Redis outages
+            log.warn("Redis check failed for key: {}. Falling back to local rate limiting. Error: {}", redisKey, e.getMessage());
+            
+            boolean allowed = isAllowedLocal(redisKey, limit, config.getWindowMs());
+            if (allowed) {
+                eventPublisher.publishEvent(new RequestAllowedEvent(this, clientIdentifier, tier, requestUri));
+                return true;
+            } else {
+                eventPublisher.publishEvent(new RequestBlockedEvent(this, clientIdentifier, tier, requestUri));
+                sendThrottledResponse(response, tier, limit, config.getWindowMs());
+                return false;
+            }
+        }
+    }
+
+    private boolean isAllowedLocal(String key, int limit, long windowMs) {
+        long now = System.currentTimeMillis();
+        long windowStart = now - windowMs;
+
+        ConcurrentSkipListSet<Long> timestamps = localCache.computeIfAbsent(key, k -> new ConcurrentSkipListSet<>());
+
+        // Clean up elements older than window start
+        timestamps.headSet(windowStart).clear();
+
+        if (timestamps.size() < limit) {
+            timestamps.add(now);
             return true;
         }
+        return false;
+    }
+
+    @Scheduled(fixedRate = 300000) // Clean idle cache keys every 5 minutes to prevent memory leak
+    public void cleanIdleLocalCache() {
+        long oneHourAgo = System.currentTimeMillis() - 3600000;
+        localCache.forEach((key, timestamps) -> {
+            timestamps.headSet(oneHourAgo).clear();
+            if (timestamps.isEmpty()) {
+                localCache.remove(key);
+            }
+        });
     }
 
     private RateLimitProperties.RateLimitConfig findMatchingConfig(String uri) {
