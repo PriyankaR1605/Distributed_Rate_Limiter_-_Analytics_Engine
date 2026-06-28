@@ -22,18 +22,18 @@ public class AnalyticsListener {
     @Async
     @EventListener
     public void onRequestAllowed(RequestAllowedEvent event) {
-        String clientIp = event.getClientIp();
+        String identifier = event.getClientIdentifier();
         String dateStr = LocalDate.now().format(DATE_FORMATTER);
         String hllKey = String.format("analytics:dau:%s", dateStr);
 
         try {
-            // PFADD analytics:dau:{YYYY-MM-DD} {client_ip}
-            Long added = redisTemplate.opsForHyperLogLog().add(hllKey, clientIp);
+            // PFADD analytics:dau:{YYYY-MM-DD} {client_identifier}
+            Long added = redisTemplate.opsForHyperLogLog().add(hllKey, identifier);
             if (added != null && added > 0) {
-                log.debug("New unique consumer recorded for today ({}): {}", dateStr, clientIp);
+                log.debug("New unique consumer recorded for today ({}) tier ({}): {}", dateStr, event.getTier(), identifier);
             }
         } catch (Exception e) {
-            log.error("Failed to update HyperLogLog analytics for client IP: {}", clientIp, e);
+            log.error("Failed to update HyperLogLog analytics for client: {}", identifier, e);
         }
     }
 }

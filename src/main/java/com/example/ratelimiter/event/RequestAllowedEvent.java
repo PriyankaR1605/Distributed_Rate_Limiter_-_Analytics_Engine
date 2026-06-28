@@ -1,19 +1,26 @@
 package com.example.ratelimiter.event;
 
+import com.example.ratelimiter.model.UserTier;
 import org.springframework.context.ApplicationEvent;
 
 public class RequestAllowedEvent extends ApplicationEvent {
-    private final String clientIp;
+    private final String clientIdentifier;
+    private final UserTier tier;
     private final String path;
 
-    public RequestAllowedEvent(Object source, String clientIp, String path) {
+    public RequestAllowedEvent(Object source, String clientIdentifier, UserTier tier, String path) {
         super(source);
-        this.clientIp = clientIp;
+        this.clientIdentifier = clientIdentifier;
+        this.tier = tier;
         this.path = path;
     }
 
-    public String getClientIp() {
-        return clientIp;
+    public String getClientIdentifier() {
+        return clientIdentifier;
+    }
+
+    public UserTier getTier() {
+        return tier;
     }
 
     public String getPath() {

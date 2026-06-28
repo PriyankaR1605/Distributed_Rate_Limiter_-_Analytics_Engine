@@ -10,13 +10,19 @@ spring:
       port: ${REDIS_PORT:6379}
       timeout: 2000
 
-# Custom Rate Limiting Configurations
+# Tier-based Rate Limiting Configurations per path
 app:
   rate-limit:
     configs:
       - path: "/api/v1/data"
-        limit: 10
         window-ms: 60000
+        limits:
+          ANONYMOUS: 2
+          STANDARD: 10
+          PREMIUM: 50
       - path: "/api/v1/profile"
-        limit: 3
         window-ms: 60000
+        limits:
+          ANONYMOUS: 1
+          STANDARD: 3
+          PREMIUM: 15
