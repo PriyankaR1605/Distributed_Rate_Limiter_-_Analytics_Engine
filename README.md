@@ -39,6 +39,10 @@ This builds the Spring Boot multi-stage image and links it to the Redis containe
 Once the application is running, open your browser and navigate to:
 👉 **[http://localhost:8080/admin/dashboard](http://localhost:8080/admin/dashboard)**
 
+*Login using the administrator credentials:*
+- **Username**: `admin`
+- **Password**: `admin-secure-pass`
+
 ### Features:
 - **Interactive API Sandbox**: Fire rate-limited requests to `/api/v1/data` or `/api/v1/profile` directly from the browser using different pre-configured API keys.
 - **Live Traffic composition**: A real-time Doughnut chart displaying the proportion of allowed vs. throttled (429) requests.
@@ -99,7 +103,7 @@ You can dynamically update rate limit rules on-the-fly across all running applic
 
 To change quotas on `/api/v1/data` (e.g. change Anonymous limit to 5 and Premium to 150):
 ```bash
-curl -X POST -H "Content-Type: application/json" \
+curl -u admin:admin-secure-pass -X POST -H "Content-Type: application/json" \
   -d '{"path":"/api/v1/data","windowMs":60000,"limits":{"ANONYMOUS":5,"STANDARD":25,"PREMIUM":150}}' \
   http://localhost:8080/admin/config
 ```
@@ -107,7 +111,7 @@ This payload is published via a Redis Pub/Sub channel, prompting all cluster nod
 
 To inspect all running configurations on the node:
 ```bash
-curl http://localhost:8080/admin/config
+curl -u admin:admin-secure-pass http://localhost:8080/admin/config
 ```
 
 ---

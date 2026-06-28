@@ -15,6 +15,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.Base64;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -143,5 +144,18 @@ public class RateLimiterApplicationTests {
         Assertions.assertEquals(5, updatedConfig.getLimits().get(UserTier.ANONYMOUS));
         Assertions.assertEquals(25, updatedConfig.getLimits().get(UserTier.STANDARD));
         Assertions.assertEquals(150, updatedConfig.getLimits().get(UserTier.PREMIUM));
+    }
+
+    @Test
+    public void testAdminEndpointProtectedAndAccessibleWithAuth() throws Exception {
+        // Request 1: Without auth, should return 401 Unauthorized
+        mockMvc.perform(get("/admin/config"))
+                .andExpect(status().isUnauthorized());
+
+        // Request 2: With valid basic auth, should return 200 OK
+        String basicAuth = "Basic " + Base64.getEncoder().encodeToString("admin:admin-secure-pass".getBytes());
+        mockMvc.perform(get("/admin/config")
+                .header("Authorization", basicAuth))
+                .andExpect(status().isOk());
     }
 }
