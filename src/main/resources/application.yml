@@ -1,0 +1,22 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: rate-limiter-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000
+
+# Custom Rate Limiting Configurations
+app:
+  rate-limit:
+    configs:
+      - path: "/api/v1/data"
+        limit: 10
+        window-ms: 60000
+      - path: "/api/v1/profile"
+        limit: 3
+        window-ms: 60000
