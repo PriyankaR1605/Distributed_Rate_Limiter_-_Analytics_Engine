@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics & Rate Limiter Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-secondary: rgba(17, 24, 39, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-blue: #00f0ff;
+            --accent-purple: #bd00ff;
+            --accent-green: #39ff14;
+            --accent-red: #ff007f;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --shadow-glow: 0 8px 32px 0 rgba(0, 240, 255, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(at 10% 20%, rgba(189, 0, 255, 0.05) 0px, transparent 50%),
+                radial-gradient(at 90% 80%, rgba(0, 240, 255, 0.05) 0px, transparent 50%);
+        }
+
+        header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(12px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo-section h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-section p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 0.2rem;
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(57, 255, 20, 0.08);
+            border: 1px solid rgba(57, 255, 20, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.85rem;
+            color: var(--accent-green);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-green);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        main {
+            flex: 1;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        /* Metrics grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .metric-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(8px);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+        }
+
+        .metric-card.blue::before { background: var(--accent-blue); }
+        .metric-card.green::before { background: var(--accent-green); }
+        .metric-card.red::before { background: var(--accent-red); }
+
+        .metric-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.7);
+        }
+
+        .metric-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin: 0.5rem 0;
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+        }
+
+        .metric-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Core Layout Grid */
+        .dashboard-layout {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .panel-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            border-left: 3px solid var(--accent-purple);
+            padding-left: 0.75rem;
+        }
+
+        /* Request Sandbox Styles */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        select, input {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem;
+            color: var(--text-main);
+            font-family: inherit;
+            outline: none;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--accent-blue);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: #0b0f19;
+            font-weight: 800;
+            border: none;
+            border-radius: 8px;
+            padding: 0.85rem;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+            box-shadow: var(--shadow-glow);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.15);
+            box-shadow: 0 12px 40px 0 rgba(0, 240, 255, 0.25);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        /* Console Output */
+        .console-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            flex: 1;
+        }
+
+        .console-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .console {
+            background: #05070c;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: #a7f3d0;
+            min-height: 250px;
+            max-height: 350px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+
+        .log-entry {
+            margin-bottom: 0.5rem;
+            border-left: 2px solid #10b981;
+            padding-left: 0.5rem;
+        }
+
+        .log-entry.error {
+            color: #fda4af;
+            border-color: var(--accent-red);
+        }
+
+        .log-entry.info {
+            color: #93c5fd;
+            border-color: var(--accent-blue);
+        }
+
+        /* Chart container */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 260px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .pill-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.25rem;
+        }
+
+        .pill {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.35rem 0.65rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .pill:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .pill.active {
+            background: rgba(0, 240, 255, 0.15);
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+            margin-top: auto;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo-section">
+            <h1>DISTRIBUTED MONITORING CONSOLE</h1>
+            <p>API Rate Limiter & Real-Time Telemetry</p>
+        </div>
+        <div class="system-status">
+            <span class="status-dot"></span>
+            <span>SYSTEM ACTIVE (REDIS SYNC)</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card blue">
+                <div class="metric-label">Daily Active Consumers</div>
+                <div class="metric-value" id="metric-dau">0</div>
+                <div class="metric-desc">Distinct users tracked via HyperLogLog today</div>
+            </div>
+            <div class="metric-card green">
+                <div class="metric-label">Allowed Transactions</div>
+                <div class="metric-value" id="metric-allowed">0</div>
+                <div class="metric-desc">Total processed API requests inside window</div>
+            </div>
+            <div class="metric-card red">
+                <div class="metric-label">Throttled Requests (429)</div>
+                <div class="metric-value" id="metric-blocked">0</div>
+                <div class="metric-desc">Total blocked client requests dropped today</div>
+            </div>
+        </div>
+
+        <!-- Layout splits -->
+        <div class="dashboard-layout">
+            <!-- Sandbox panel -->
+            <div class="panel">
+                <div class="panel-title">Interactive API Sandbox</div>
+                
+                <div class="form-group">
+                    <label for="endpoint-select">Target API Endpoint</label>
+                    <select id="endpoint-select">
+                        <option value="/api/v1/data">GET /api/v1/data (Quota: standard: 10/min, premium: 50/min, anon: 2/min)</option>
+                        <option value="/api/v1/profile">POST /api/v1/profile (Quota: standard: 3/min, premium: 15/min, anon: 1/min)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>X-API-KEY Credentials</label>
+                    <div class="pill-container" id="key-presets">
+                        <div class="pill active" data-val="">Anonymous (No Key)</div>
+                        <div class="pill" data-val="key_standard_xyz789">Standard key</div>
+                        <div class="pill" data-val="key_premium_abc123">Premium key</div>
+                        <div class="pill" data-val="custom">Custom key...</div>
+                    </div>
+                    <input type="text" id="custom-key-input" placeholder="Enter custom API Key..." style="display: none; margin-top: 0.75rem;">
+                </div>
+
+                <button class="btn" id="send-request-btn">Fire API Request</button>
+
+                <div class="console-wrapper">
+                    <div class="console-header">
+                        <label>Transaction Logs</label>
+                        <span id="clear-logs" style="font-size:0.75rem; color:var(--accent-blue); cursor:pointer;">Clear console</span>
+                    </div>
+                    <div class="console" id="log-console">
+[Console ready to print traffic transactions...]
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visualization panel -->
+            <div class="panel">
+                <div class="panel-title">Live Traffic Composition</div>
+                <div class="chart-container">
+                    <canvas id="traffic-composition-chart"></canvas>
+                </div>
+                <div style="font-size:0.85rem; color:var(--text-muted); line-height: 1.5; border-top:1px solid var(--border-color); padding-top:1rem;">
+                    <strong>System Notes:</strong><br>
+                    - The rate limiter runs atomically in Redis via sliding window logs, providing sub-millisecond check latency.<br>
+                    - HyperLogLog allows high-cardinality telemetry with less than 12 KB memory footprint per day.<br>
+                    - Visual indicators update every 3 seconds to keep monitoring statistics fresh.
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>Distributed Rate Limiter & Analytics Engine &bull; Powering Secure APIs</p>
+    </footer>
+
+    <script>
+        // DOM Elements
+        const metricDau = document.getElementById('metric-dau');
+        const metricAllowed = document.getElementById('metric-allowed');
+        const metricBlocked = document.getElementById('metric-blocked');
+        const endpointSelect = document.getElementById('endpoint-select');
+        const keyPresets = document.getElementById('key-presets');
+        const customKeyInput = document.getElementById('custom-key-input');
+        const sendRequestBtn = document.getElementById('send-request-btn');
+        const logConsole = document.getElementById('log-console');
+        const clearLogsBtn = document.getElementById('clear-logs');
+
+        let selectedApiKey = '';
+        let trafficChart = null;
+
+        // Preset Key handling
+        keyPresets.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('pill')) return;
+            
+            document.querySelectorAll('#key-presets .pill').forEach(el => el.classList.remove('active'));
+            e.target.classList.add('active');
+
+            const val = e.target.getAttribute('data-val');
+            if (val === 'custom') {
+                customKeyInput.style.display = 'block';
+                selectedApiKey = customKeyInput.value;
+            } else {
+                customKeyInput.style.display = 'none';
+                selectedApiKey = val;
+            }
+        });
+
+        customKeyInput.addEventListener('input', () => {
+            selectedApiKey = customKeyInput.value;
+        });
+
+        // Clear Console
+        clearLogsBtn.addEventListener('click', () => {
+            logConsole.innerHTML = '[Console cleared]';
+        });
+
+        // Initialize Chart
+        function initChart() {
+            const ctx = document.getElementById('traffic-composition-chart').getContext('2d');
+            trafficChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Allowed Requests', 'Rate Limited (429)'],
+                    datasets: [{
+                        data: [0, 0],
+                        backgroundColor: ['rgba(57, 255, 20, 0.65)', 'rgba(255, 0, 127, 0.65)'],
+                        borderColor: ['#39ff14', '#ff007f'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#9ca3af',
+                                font: {
+                                    family: 'Outfit',
+                                    size: 13
+                                }
+                            }
+                        }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        // Fetch metrics
+        async function fetchMetrics() {
+            try {
+                const res = await fetch('/admin/metrics/dashboard');
+                if (res.ok) {
+                    const data = await res.json();
+                    
+                    // Update stats
+                    metricDau.innerText = data.unique_users;
+                    metricAllowed.innerText = data.allowed_requests;
+                    metricBlocked.innerText = data.blocked_requests;
+
+                    // Update Chart
+                    if (trafficChart) {
+                        const total = data.allowed_requests + data.blocked_requests;
+                        if (total === 0) {
+                            trafficChart.data.datasets[0].data = [1, 0]; // Default mock allowed state
+                        } else {
+                            trafficChart.data.datasets[0].data = [data.allowed_requests, data.blocked_requests];
+                        }
+                        trafficChart.update();
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to fetch dashboard metrics", err);
+            }
+        }
+
+        // Send API Request Simulator
+        sendRequestBtn.addEventListener('click', async () => {
+            const endpoint = endpointSelect.value;
+            const headers = new Headers();
+            if (selectedApiKey) {
+                headers.append('X-API-KEY', selectedApiKey);
+            }
+
+            const method = endpoint === '/api/v1/profile' ? 'POST' : 'GET';
+            const logEntry = document.createElement('div');
+            logEntry.classList.add('log-entry');
+
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.innerHTML = `<span style="color: #9ca3af;">[${timestamp}]</span> Dispatching Request: <strong>${method} ${endpoint}</strong><br>`;
+
+            try {
+                const startTime = performance.now();
+                const res = await fetch(endpoint, { method, headers });
+                const duration = (performance.now() - startTime).toFixed(1);
+                
+                const body = await res.json();
+                
+                if (res.status === 200) {
+                    logEntry.classList.add('info');
+                    logEntry.innerHTML += `Status: <strong style="color:#10b981;">200 OK</strong> (${duration}ms)<br>Response: ${JSON.stringify(body)}`;
+                } else if (res.status === 429) {
+                    logEntry.classList.add('error');
+                    const retryAfter = res.headers.get('Retry-After');
+                    logEntry.innerHTML += `Status: <strong style="color:#f43f5e;">429 Too Many Requests</strong> (${duration}ms)<br>Retry-After Header: <span style="text-decoration: underline;">${retryAfter}s</span><br>Response: ${JSON.stringify(body)}`;
+                } else {
+                    logEntry.classList.add('error');
+                    logEntry.innerHTML += `Status: <strong>${res.status}</strong> (${duration}ms)<br>Response: ${JSON.stringify(body)}`;
+                }
+            } catch (err) {
+                logEntry.classList.add('error');
+                logEntry.innerHTML += `Network Failure: ${err.message}`;
+            }
+
+            if (logConsole.innerHTML.trim() === '[Console ready to print traffic transactions...]') {
+                logConsole.innerHTML = '';
+            }
+            logConsole.prepend(logEntry);
+
+            // Fetch metrics immediately after request completes
+            fetchMetrics();
+        });
+
+        // Run setup
+        initChart();
+        fetchMetrics();
+        
+        // Polling loop
+        setInterval(fetchMetrics, 3000);
+    </script>
+</body>
+</html>

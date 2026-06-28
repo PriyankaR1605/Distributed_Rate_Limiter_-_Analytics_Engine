@@ -2,6 +2,7 @@ package com.example.ratelimiter.interceptor;
 
 import com.example.ratelimiter.config.RateLimitProperties;
 import com.example.ratelimiter.event.RequestAllowedEvent;
+import com.example.ratelimiter.event.RequestBlockedEvent;
 import com.example.ratelimiter.model.UserTier;
 import com.example.ratelimiter.service.ApiKeyService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -68,6 +69,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             }
 
             // Rate limit exceeded - Return 429
+            eventPublisher.publishEvent(new RequestBlockedEvent(this, clientIdentifier, tier, requestUri));
             sendThrottledResponse(response, tier, limit, config.getWindowMs());
             return false;
         } catch (Exception e) {

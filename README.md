@@ -34,6 +34,18 @@ This builds the Spring Boot multi-stage image and links it to the Redis containe
 
 ---
 
+## 📺 Interactive Dashboard
+
+Once the application is running, open your browser and navigate to:
+👉 **[http://localhost:8080/admin/dashboard](http://localhost:8080/admin/dashboard)**
+
+### Features:
+- **Interactive API Sandbox**: Fire rate-limited requests to `/api/v1/data` or `/api/v1/profile` directly from the browser using different pre-configured API keys.
+- **Live Traffic composition**: A real-time Doughnut chart displaying the proportion of allowed vs. throttled (429) requests.
+- **Metric Counters**: Live-polling counts of Daily Active Users (computed via HyperLogLog), total allowed requests, and total blocked requests.
+
+---
+
 ## 🧪 Validating Rate Limits & Analytics
 
 ### 1. Test Anonymous (No Key) Tier (Limit: 2 requests / 60s)

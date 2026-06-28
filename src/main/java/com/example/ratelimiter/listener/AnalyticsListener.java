@@ -1,6 +1,7 @@
 package com.example.ratelimiter.listener;
 
 import com.example.ratelimiter.event.RequestAllowedEvent;
+import com.example.ratelimiter.event.RequestBlockedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -25,6 +26,7 @@ public class AnalyticsListener {
         String identifier = event.getClientIdentifier();
         String dateStr = LocalDate.now().format(DATE_FORMATTER);
         String hllKey = String.format("analytics:dau:%s", dateStr);
+        String allowedKey = String.format("analytics:allowed:%s", dateStr);
 
         try {
             // PFADD analytics:dau:{YYYY-MM-DD} {client_identifier}
@@ -32,8 +34,25 @@ public class AnalyticsListener {
             if (added != null && added > 0) {
                 log.debug("New unique consumer recorded for today ({}) tier ({}): {}", dateStr, event.getTier(), identifier);
             }
+            
+            // INCR analytics:allowed:{YYYY-MM-DD}
+            redisTemplate.opsForValue().increment(allowedKey);
         } catch (Exception e) {
             log.error("Failed to update HyperLogLog analytics for client: {}", identifier, e);
+        }
+    }
+
+    @Async
+    @EventListener
+    public void onRequestBlocked(RequestBlockedEvent event) {
+        String dateStr = LocalDate.now().format(DATE_FORMATTER);
+        String blockedKey = String.format("analytics:blocked:%s", dateStr);
+
+        try {
+            // INCR analytics:blocked:{YYYY-MM-DD}
+            redisTemplate.opsForValue().increment(blockedKey);
+        } catch (Exception e) {
+            log.error("Failed to increment blocked request metrics", e);
         }
     }
 }
