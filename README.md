@@ -94,14 +94,32 @@ curl http://localhost:8080/admin/metrics/dau
 ```
 *(User count will accurately track the premium key, standard key, and anonymous IP address as distinct active users in the HyperLogLog).*
 
+### 5. Dynamic Rate Limit Configuration Updates (Redis Pub/Sub)
+You can dynamically update rate limit rules on-the-fly across all running application instances without restarting the servers.
+
+To change quotas on `/api/v1/data` (e.g. change Anonymous limit to 5 and Premium to 150):
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"path":"/api/v1/data","windowMs":60000,"limits":{"ANONYMOUS":5,"STANDARD":25,"PREMIUM":150}}' \
+  http://localhost:8080/admin/config
+```
+This payload is published via a Redis Pub/Sub channel, prompting all cluster nodes to instantly update their in-memory limit cache.
+
+To inspect all running configurations on the node:
+```bash
+curl http://localhost:8080/admin/config
+```
+
 ---
 
 ## 📂 Codebase Details
 
 - **Core Algorithm**: Located in [`sliding_window_rate_limit.lua`](src/main/resources/scripts/sliding_window_rate_limit.lua). Runs atomically on Redis to avoid concurrency race conditions.
 - **Client Tier Management**: Managed inside [`UserTier.java`](src/main/java/com/example/ratelimiter/model/UserTier.java) and [`ApiKeyService.java`](src/main/java/com/example/ratelimiter/service/ApiKeyService.java).
-- **Interception Middleware**: Located in [`RateLimitInterceptor.java`](src/main/java/com/example/ratelimiter/interceptor/RateLimitInterceptor.java). Determines client tier, maps the correct quotas, and filters traffic.
+- **Dynamic Configuration Sync**: Managed by [`RateLimitConfigManager.java`](src/main/java/com/example/ratelimiter/config/RateLimitConfigManager.java) and synchronized in real-time across instances via [`ConfigUpdateMessageListener.java`](src/main/java/com/example/ratelimiter/listener/ConfigUpdateMessageListener.java) subscribing to a Redis Pub/Sub topic.
+- **Interception Middleware**: Located in [`RateLimitInterceptor.java`](src/main/java/com/example/ratelimiter/interceptor/RateLimitInterceptor.java). Determines client tier, maps the correct quotas dynamically, and filters traffic.
   - *Local Failover Resiliency*: If Redis is offline, the interceptor catches the exception and falls back to a local in-memory sliding window log (using `ConcurrentSkipListSet`). This keeps the server protected from traffic spikes during database outages.
   - *Memory Management*: A background scheduler runs every 5 minutes to evict old timestamps and clean up idle cache keys, preventing memory leaks.
 - **Telemetry**: Located in [`AnalyticsListener.java`](src/main/java/com/example/ratelimiter/listener/AnalyticsListener.java). Observes approved requests asynchronously (`@Async`) and registers them in Redis HyperLogLog.
+
 

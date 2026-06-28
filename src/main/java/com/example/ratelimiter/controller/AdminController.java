@@ -1,11 +1,17 @@
 package com.example.ratelimiter.controller;
 
+import com.example.ratelimiter.config.RateLimitConfigManager;
+import com.example.ratelimiter.config.RateLimitProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -25,6 +31,10 @@ import java.util.Map;
 public class AdminController {
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final ChannelTopic configUpdateTopic;
+    private final ObjectMapper objectMapper;
+    private final RateLimitConfigManager configManager;
+    
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     @GetMapping("/metrics/dau")
@@ -98,6 +108,38 @@ public class AdminController {
     public String getDashboardHtml() throws IOException {
         try (InputStream is = new ClassPathResource("static/dashboard.html").getInputStream()) {
             return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, RateLimitProperties.RateLimitConfig>> getConfigs() {
+        return ResponseEntity.ok(configManager.getAllConfigs());
+    }
+
+    @PostMapping("/config")
+    public ResponseEntity<Map<String, String>> updateConfig(@RequestBody RateLimitProperties.RateLimitConfig newConfig) {
+        if (newConfig == null || newConfig.getPath() == null) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "Invalid configuration payload"));
+        }
+
+        try {
+            // Serialize update to JSON
+            String jsonPayload = objectMapper.writeValueAsString(newConfig);
+            
+            // Publish message via Redis Pub/Sub topic to sync all application instances
+            redisTemplate.convertAndSend(configUpdateTopic.getTopic(), jsonPayload);
+            
+            log.info("Published rate limit config updates event for path: {}", newConfig.getPath());
+            return ResponseEntity.ok(Map.of(
+                    "status", "success",
+                    "message", "Configuration update event published successfully for path: " + newConfig.getPath()
+            ));
+        } catch (Exception e) {
+            log.error("Failed to publish rate limit config update event", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "error",
+                    "message", "Failed to publish config update: " + e.getMessage()
+            ));
         }
     }
 }

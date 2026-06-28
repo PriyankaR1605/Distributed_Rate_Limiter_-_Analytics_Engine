@@ -1,5 +1,9 @@
 package com.example.ratelimiter;
 
+import com.example.ratelimiter.config.RateLimitConfigManager;
+import com.example.ratelimiter.config.RateLimitProperties;
+import com.example.ratelimiter.model.UserTier;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,10 +15,11 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.Map;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -23,6 +28,9 @@ public class RateLimiterApplicationTests {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private RateLimitConfigManager configManager;
 
     @MockBean
     private RedisTemplate<String, Object> redisTemplate;
@@ -108,5 +116,32 @@ public class RateLimiterApplicationTests {
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.error").value("Too Many Requests"))
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Rate limit exceeded for tier ANONYMOUS")));
+    }
+
+    @Test
+    public void testDynamicConfigUpdate() {
+        // Arrange: Make sure the manager has the initial config
+        RateLimitProperties.RateLimitConfig initialConfig = configManager.getConfig("/api/v1/data");
+        Assertions.assertNotNull(initialConfig);
+        
+        int initialLimit = initialConfig.getLimits().get(UserTier.ANONYMOUS);
+        Assertions.assertEquals(2, initialLimit);
+
+        // Act: Update configuration dynamically
+        RateLimitProperties.RateLimitConfig newConfig = new RateLimitProperties.RateLimitConfig();
+        newConfig.setPath("/api/v1/data");
+        newConfig.setWindowMs(60000);
+        newConfig.setLimits(Map.of(
+                UserTier.ANONYMOUS, 5,
+                UserTier.STANDARD, 25,
+                UserTier.PREMIUM, 150
+        ));
+        configManager.updateConfig(newConfig);
+
+        // Assert: ConfigManager has updated configs
+        RateLimitProperties.RateLimitConfig updatedConfig = configManager.getConfig("/api/v1/data");
+        Assertions.assertEquals(5, updatedConfig.getLimits().get(UserTier.ANONYMOUS));
+        Assertions.assertEquals(25, updatedConfig.getLimits().get(UserTier.STANDARD));
+        Assertions.assertEquals(150, updatedConfig.getLimits().get(UserTier.PREMIUM));
     }
 }

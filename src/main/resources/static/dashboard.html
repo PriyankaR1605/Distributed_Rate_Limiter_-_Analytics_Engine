@@ -3,23 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analytics & Rate Limiter Monitor</title>
+    <title>Distributed Gateway Controller & Telemetry</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg-primary: #0b0f19;
-            --bg-secondary: rgba(17, 24, 39, 0.7);
+            --bg-primary: #080c14;
+            --bg-secondary: rgba(15, 23, 42, 0.6);
             --border-color: rgba(255, 255, 255, 0.08);
             --accent-blue: #00f0ff;
             --accent-purple: #bd00ff;
             --accent-green: #39ff14;
             --accent-red: #ff007f;
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
-            --shadow-glow: 0 8px 32px 0 rgba(0, 240, 255, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --card-glow-blue: 0 0 20px rgba(0, 240, 255, 0.15);
+            --card-glow-green: 0 0 20px rgba(57, 255, 20, 0.15);
+            --card-glow-red: 0 0 20px rgba(255, 0, 127, 0.15);
         }
 
         * {
@@ -37,14 +39,14 @@
             flex-direction: column;
             overflow-x: hidden;
             background-image: 
-                radial-gradient(at 10% 20%, rgba(189, 0, 255, 0.05) 0px, transparent 50%),
-                radial-gradient(at 90% 80%, rgba(0, 240, 255, 0.05) 0px, transparent 50%);
+                radial-gradient(at 0% 0%, rgba(189, 0, 255, 0.08) 0px, transparent 40%),
+                radial-gradient(at 100% 100%, rgba(0, 240, 255, 0.08) 0px, transparent 40%);
         }
 
         header {
-            padding: 1.5rem 2rem;
+            padding: 1.25rem 2rem;
             border-bottom: 1px solid var(--border-color);
-            background: rgba(11, 15, 25, 0.8);
+            background: rgba(8, 12, 20, 0.85);
             backdrop-filter: blur(12px);
             display: flex;
             justify-content: space-between;
@@ -55,7 +57,7 @@
         }
 
         .logo-section h1 {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             font-weight: 800;
             letter-spacing: -0.5px;
             background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
@@ -64,23 +66,24 @@
         }
 
         .logo-section p {
-            font-size: 0.75rem;
+            font-size: 0.72rem;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 2px;
-            margin-top: 0.2rem;
+            margin-top: 0.15rem;
         }
 
         .system-status {
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            background: rgba(57, 255, 20, 0.08);
+            background: rgba(57, 255, 20, 0.06);
             border: 1px solid rgba(57, 255, 20, 0.2);
-            padding: 0.5rem 1rem;
+            padding: 0.5rem 1.1rem;
             border-radius: 9999px;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             color: var(--accent-green);
+            font-weight: 600;
         }
 
         .status-dot {
@@ -94,25 +97,25 @@
 
         @keyframes pulse {
             0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.3); opacity: 0.5; }
+            50% { transform: scale(1.3); opacity: 0.4; }
             100% { transform: scale(1); opacity: 1; }
         }
 
         main {
             flex: 1;
-            max-width: 1400px;
+            max-width: 1500px;
             width: 100%;
             margin: 0 auto;
-            padding: 2rem;
+            padding: 1.75rem;
             display: flex;
             flex-direction: column;
-            gap: 2rem;
+            gap: 1.75rem;
         }
 
         /* Metrics grid */
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 1.5rem;
         }
 
@@ -121,7 +124,7 @@
             border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 1.5rem;
-            backdrop-filter: blur(8px);
+            backdrop-filter: blur(12px);
             position: relative;
             overflow: hidden;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -141,36 +144,38 @@
         .metric-card.red::before { background: var(--accent-red); }
 
         .metric-card:hover {
-            transform: translateY(-4px);
-            border-color: rgba(255, 255, 255, 0.15);
-            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.7);
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.12);
         }
 
+        .metric-card.blue:hover { box-shadow: var(--card-glow-blue); }
+        .metric-card.green:hover { box-shadow: var(--card-glow-green); }
+        .metric-card.red:hover { box-shadow: var(--card-glow-red); }
+
         .metric-label {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 1px;
+            font-weight: 600;
         }
 
         .metric-value {
-            font-size: 2.5rem;
+            font-size: 2.25rem;
             font-weight: 800;
-            margin: 0.5rem 0;
-            display: flex;
-            align-items: baseline;
-            gap: 0.5rem;
+            margin: 0.4rem 0;
+            letter-spacing: -0.5px;
         }
 
         .metric-desc {
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             color: var(--text-muted);
         }
 
-        /* Core Layout Grid */
+        /* Core Layout */
         .dashboard-layout {
             display: grid;
-            grid-template-columns: 1fr 1.2fr;
+            grid-template-columns: 1fr 1.1fr;
             gap: 1.5rem;
         }
 
@@ -180,259 +185,410 @@
             }
         }
 
-        .panel {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 1.5rem;
-            backdrop-filter: blur(8px);
+        .left-column, .right-column {
             display: flex;
             flex-direction: column;
             gap: 1.5rem;
         }
 
-        .panel-title {
-            font-size: 1.15rem;
-            font-weight: 600;
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             border-left: 3px solid var(--accent-purple);
             padding-left: 0.75rem;
         }
 
-        /* Request Sandbox Styles */
+        .panel-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+        }
+
+        /* Sandbox & Config Forms */
         .form-group {
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
-            margin-bottom: 1rem;
         }
 
         label {
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             color: var(--text-muted);
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        select, input {
-            background: rgba(255, 255, 255, 0.05);
+        select, input[type="text"], input[type="number"] {
+            background: rgba(255, 255, 255, 0.04);
             border: 1px solid var(--border-color);
             border-radius: 8px;
-            padding: 0.75rem;
+            padding: 0.7rem 0.85rem;
             color: var(--text-main);
             font-family: inherit;
             outline: none;
-            font-size: 0.95rem;
+            font-size: 0.92rem;
             transition: all 0.2s;
         }
 
-        select:focus, input:focus {
+        select:focus, input[type="text"]:focus, input[type="number"]:focus {
             border-color: var(--accent-blue);
-            background: rgba(255, 255, 255, 0.08);
-        }
-
-        .btn {
-            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-            color: #0b0f19;
-            font-weight: 800;
-            border: none;
-            border-radius: 8px;
-            padding: 0.85rem;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: all 0.3s;
-            box-shadow: var(--shadow-glow);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            filter: brightness(1.15);
-            box-shadow: 0 12px 40px 0 rgba(0, 240, 255, 0.25);
-        }
-
-        .btn:active {
-            transform: translateY(0);
-        }
-
-        /* Console Output */
-        .console-wrapper {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            flex: 1;
-        }
-
-        .console-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .console {
-            background: #05070c;
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 1rem;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
-            color: #a7f3d0;
-            min-height: 250px;
-            max-height: 350px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
-        }
-
-        .log-entry {
-            margin-bottom: 0.5rem;
-            border-left: 2px solid #10b981;
-            padding-left: 0.5rem;
-        }
-
-        .log-entry.error {
-            color: #fda4af;
-            border-color: var(--accent-red);
-        }
-
-        .log-entry.info {
-            color: #93c5fd;
-            border-color: var(--accent-blue);
-        }
-
-        /* Chart container */
-        .chart-container {
-            position: relative;
-            width: 100%;
-            height: 260px;
-            display: flex;
-            justify-content: center;
+            background: rgba(255, 255, 255, 0.07);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.1);
         }
 
         .pill-container {
             display: flex;
             flex-wrap: wrap;
             gap: 0.5rem;
-            margin-top: 0.25rem;
         }
 
         .pill {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.03);
             border: 1px solid var(--border-color);
             border-radius: 6px;
-            padding: 0.35rem 0.65rem;
-            font-size: 0.75rem;
+            padding: 0.4rem 0.75rem;
+            font-size: 0.78rem;
             cursor: pointer;
             transition: all 0.2s;
+            font-weight: 600;
         }
 
         .pill:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.07);
         }
 
         .pill.active {
-            background: rgba(0, 240, 255, 0.15);
+            background: rgba(0, 240, 255, 0.1);
             border-color: var(--accent-blue);
             color: var(--accent-blue);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
+        }
+
+        /* Config Sliders */
+        .config-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 60px;
+            align-items: center;
+            gap: 1rem;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.65rem 1rem;
+        }
+
+        .tier-label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .tier-label.anon { color: var(--text-muted); }
+        .tier-label.std { color: var(--accent-blue); }
+        .tier-label.prem { color: #d4af37; }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-purple);
+            cursor: pointer;
+            box-shadow: 0 0 8px var(--accent-purple);
+            transition: transform 0.1s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.25);
+        }
+
+        .config-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            text-align: right;
+            font-weight: bold;
+        }
+
+        /* Console styling */
+        .console-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .console {
+            background: #03050a;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.85rem 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            color: #34d399;
+            min-height: 200px;
+            max-height: 260px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+        }
+
+        .log-entry {
+            margin-bottom: 0.5rem;
+            border-left: 2px solid var(--accent-green);
+            padding-left: 0.5rem;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .log-entry.error {
+            color: #f87171;
+            border-color: var(--accent-red);
+        }
+
+        .log-entry.info {
+            color: #60a5fa;
+            border-color: var(--accent-blue);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(2px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Buttons */
+        .btn {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: #080c14;
+            font-weight: 800;
+            border: none;
+            border-radius: 8px;
+            padding: 0.8rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.1);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.15);
+            box-shadow: 0 4px 20px rgba(189, 0, 255, 0.3);
+        }
+
+        .btn.outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            box-shadow: none;
+        }
+
+        .btn.outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--text-muted);
+            transform: none;
+        }
+
+        /* Chart container */
+        .chart-wrapper {
+            position: relative;
+            height: 250px;
+            width: 100%;
+        }
+
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid var(--accent-green);
+            padding: 1rem 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5), var(--card-glow-green);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            z-index: 1000;
+            transform: translateY(150%);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .toast.show {
+            transform: translateY(0);
+        }
+
+        .toast.error {
+            border-color: var(--accent-red);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5), var(--card-glow-red);
         }
 
         footer {
             text-align: center;
-            padding: 2rem;
-            font-size: 0.8rem;
+            padding: 1.5rem;
+            font-size: 0.75rem;
             color: var(--text-muted);
             border-top: 1px solid var(--border-color);
             margin-top: auto;
+            background: rgba(8, 12, 20, 0.5);
         }
     </style>
 </head>
 <body>
     <header>
         <div class="logo-section">
-            <h1>DISTRIBUTED MONITORING CONSOLE</h1>
-            <p>API Rate Limiter & Real-Time Telemetry</p>
+            <h1>GATEWAY CONTROL CONSOLE</h1>
+            <p>Distributed Rate Limiter & Real-Time Analytics</p>
         </div>
         <div class="system-status">
             <span class="status-dot"></span>
-            <span>SYSTEM ACTIVE (REDIS SYNC)</span>
+            <span>REDIS PUB/SUB LINK SYNCED</span>
         </div>
     </header>
 
     <main>
-        <!-- Metrics -->
+        <!-- Metrics Panel -->
         <div class="metrics-grid">
             <div class="metric-card blue">
-                <div class="metric-label">Daily Active Consumers</div>
+                <div class="metric-label">Daily Active Consumers (DAU)</div>
                 <div class="metric-value" id="metric-dau">0</div>
                 <div class="metric-desc">Distinct users tracked via HyperLogLog today</div>
             </div>
             <div class="metric-card green">
-                <div class="metric-label">Allowed Transactions</div>
+                <div class="metric-label">Allowed Requests</div>
                 <div class="metric-value" id="metric-allowed">0</div>
-                <div class="metric-desc">Total processed API requests inside window</div>
+                <div class="metric-desc">Total cumulative successful transactions</div>
             </div>
             <div class="metric-card red">
                 <div class="metric-label">Throttled Requests (429)</div>
                 <div class="metric-value" id="metric-blocked">0</div>
-                <div class="metric-desc">Total blocked client requests dropped today</div>
+                <div class="metric-desc">Total blocked/shed client requests dropped</div>
             </div>
         </div>
 
-        <!-- Layout splits -->
         <div class="dashboard-layout">
-            <!-- Sandbox panel -->
-            <div class="panel">
-                <div class="panel-title">Interactive API Sandbox</div>
-                
-                <div class="form-group">
-                    <label for="endpoint-select">Target API Endpoint</label>
-                    <select id="endpoint-select">
-                        <option value="/api/v1/data">GET /api/v1/data (Quota: standard: 10/min, premium: 50/min, anon: 2/min)</option>
-                        <option value="/api/v1/profile">POST /api/v1/profile (Quota: standard: 3/min, premium: 15/min, anon: 1/min)</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>X-API-KEY Credentials</label>
-                    <div class="pill-container" id="key-presets">
-                        <div class="pill active" data-val="">Anonymous (No Key)</div>
-                        <div class="pill" data-val="key_standard_xyz789">Standard key</div>
-                        <div class="pill" data-val="key_premium_abc123">Premium key</div>
-                        <div class="pill" data-val="custom">Custom key...</div>
+            <!-- Left Side: Sandbox Simulator -->
+            <div class="left-column">
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Interactive API Sandbox</div>
                     </div>
-                    <input type="text" id="custom-key-input" placeholder="Enter custom API Key..." style="display: none; margin-top: 0.75rem;">
-                </div>
-
-                <button class="btn" id="send-request-btn">Fire API Request</button>
-
-                <div class="console-wrapper">
-                    <div class="console-header">
-                        <label>Transaction Logs</label>
-                        <span id="clear-logs" style="font-size:0.75rem; color:var(--accent-blue); cursor:pointer;">Clear console</span>
+                    
+                    <div class="form-group">
+                        <label for="endpoint-select">Target Endpoint</label>
+                        <select id="endpoint-select">
+                            <option value="/api/v1/data">GET /api/v1/data (Rate Limited)</option>
+                            <option value="/api/v1/profile">POST /api/v1/profile (Stricter Limits)</option>
+                        </select>
                     </div>
-                    <div class="console" id="log-console">
-[Console ready to print traffic transactions...]
+
+                    <div class="form-group">
+                        <label>Client Identity / API Key</label>
+                        <div class="pill-container" id="key-presets">
+                            <div class="pill active" data-val="">Anonymous (IP Limit)</div>
+                            <div class="pill" data-val="key_standard_xyz789">Standard Key</div>
+                            <div class="pill" data-val="key_premium_abc123">Premium Key</div>
+                            <div class="pill" data-val="custom">Custom Key...</div>
+                        </div>
+                        <input type="text" id="custom-key-input" placeholder="Enter custom API Key..." style="display: none; margin-top: 0.5rem;">
+                    </div>
+
+                    <button class="btn" id="send-request-btn">Fire API Request</button>
+
+                    <div class="console-wrapper">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label>Transaction Logs</label>
+                            <span id="clear-logs" style="font-size:0.72rem; color:var(--accent-blue); cursor:pointer; text-transform:uppercase; font-weight:600;">Clear</span>
+                        </div>
+                        <div class="console" id="log-console">
+[Console ready to inspect transaction outputs...]
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Visualization panel -->
-            <div class="panel">
-                <div class="panel-title">Live Traffic Composition</div>
-                <div class="chart-container">
-                    <canvas id="traffic-composition-chart"></canvas>
+            <!-- Right Side: Config Editor & Charts -->
+            <div class="right-column">
+                <!-- Rules Editor -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Live Rules Configurator (Redis Pub/Sub)</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="config-path-select">Target Rule Path</label>
+                        <select id="config-path-select">
+                            <option value="/api/v1/data">/api/v1/data</option>
+                            <option value="/api/v1/profile">/api/v1/profile</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="gap: 0.75rem;">
+                        <label>Edit Limits (Requests per 60s)</label>
+                        
+                        <div class="config-row">
+                            <span class="tier-label anon">ANON</span>
+                            <input type="range" id="limit-anon" min="1" max="10" value="2">
+                            <span class="config-value" id="val-anon">2</span>
+                        </div>
+
+                        <div class="config-row">
+                            <span class="tier-label std">STANDARD</span>
+                            <input type="range" id="limit-std" min="1" max="30" value="10">
+                            <span class="config-value" id="val-std">10</span>
+                        </div>
+
+                        <div class="config-row">
+                            <span class="tier-label prem">PREMIUM</span>
+                            <input type="range" id="limit-prem" min="1" max="100" value="50">
+                            <span class="config-value" id="val-prem">50</span>
+                        </div>
+                    </div>
+
+                    <button class="btn" id="save-config-btn">Publish Live Rules</button>
                 </div>
-                <div style="font-size:0.85rem; color:var(--text-muted); line-height: 1.5; border-top:1px solid var(--border-color); padding-top:1rem;">
-                    <strong>System Notes:</strong><br>
-                    - The rate limiter runs atomically in Redis via sliding window logs, providing sub-millisecond check latency.<br>
-                    - HyperLogLog allows high-cardinality telemetry with less than 12 KB memory footprint per day.<br>
-                    - Visual indicators update every 3 seconds to keep monitoring statistics fresh.
+
+                <!-- Live Timeline Chart -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Real-Time Traffic Curves</div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="traffic-line-chart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
     </main>
 
+    <!-- Toast Notification -->
+    <div class="toast" id="toast-notif">
+        <span id="toast-text">Rules published and synced across all nodes!</span>
+    </div>
+
     <footer>
-        <p>Distributed Rate Limiter & Analytics Engine &bull; Powering Secure APIs</p>
+        <p>Distributed Rate Limiter & Analytics Engine &bull; Powering Highly Available Secure APIs</p>
     </footer>
 
     <script>
@@ -440,6 +596,7 @@
         const metricDau = document.getElementById('metric-dau');
         const metricAllowed = document.getElementById('metric-allowed');
         const metricBlocked = document.getElementById('metric-blocked');
+        
         const endpointSelect = document.getElementById('endpoint-select');
         const keyPresets = document.getElementById('key-presets');
         const customKeyInput = document.getElementById('custom-key-input');
@@ -447,13 +604,44 @@
         const logConsole = document.getElementById('log-console');
         const clearLogsBtn = document.getElementById('clear-logs');
 
-        let selectedApiKey = '';
-        let trafficChart = null;
+        const configPathSelect = document.getElementById('config-path-select');
+        const limitAnon = document.getElementById('limit-anon');
+        const limitStd = document.getElementById('limit-std');
+        const limitPrem = document.getElementById('limit-prem');
+        const valAnon = document.getElementById('val-anon');
+        const valStd = document.getElementById('val-std');
+        const valPrem = document.getElementById('val-prem');
+        const saveConfigBtn = document.getElementById('save-config-btn');
+        const toastNotif = document.getElementById('toast-notif');
+        const toastText = document.getElementById('toast-text');
 
-        // Preset Key handling
+        let selectedApiKey = '';
+        let activeConfigs = {};
+        let lineChart = null;
+
+        // Cumulative tracking for calculating incremental rates
+        let prevAllowed = 0;
+        let prevBlocked = 0;
+
+        // Chart arrays
+        const chartLength = 12;
+        let chartLabels = Array(chartLength).fill('');
+        let allowedHistory = Array(chartLength).fill(0);
+        let blockedHistory = Array(chartLength).fill(0);
+
+        // Map sliders to value text indicators
+        const bindSlider = (slider, valEl) => {
+            slider.addEventListener('input', () => {
+                valEl.innerText = slider.value;
+            });
+        };
+        bindSlider(limitAnon, valAnon);
+        bindSlider(limitStd, valStd);
+        bindSlider(limitPrem, valPrem);
+
+        // Preset Key Presets Click Handler
         keyPresets.addEventListener('click', (e) => {
             if (!e.target.classList.contains('pill')) return;
-            
             document.querySelectorAll('#key-presets .pill').forEach(el => el.classList.remove('active'));
             e.target.classList.add('active');
 
@@ -476,69 +664,187 @@
             logConsole.innerHTML = '[Console cleared]';
         });
 
-        // Initialize Chart
+        // Toast Handler
+        function showToast(msg, isError = false) {
+            toastText.innerText = msg;
+            if (isError) {
+                toastNotif.classList.add('error');
+            } else {
+                toastNotif.classList.remove('error');
+            }
+            toastNotif.classList.add('show');
+            setTimeout(() => {
+                toastNotif.classList.remove('show');
+            }, 3000);
+        }
+
+        // Initialize Line Chart
         function initChart() {
-            const ctx = document.getElementById('traffic-composition-chart').getContext('2d');
-            trafficChart = new Chart(ctx, {
-                type: 'doughnut',
+            const ctx = document.getElementById('traffic-line-chart').getContext('2d');
+            lineChart = new Chart(ctx, {
+                type: 'line',
                 data: {
-                    labels: ['Allowed Requests', 'Rate Limited (429)'],
-                    datasets: [{
-                        data: [0, 0],
-                        backgroundColor: ['rgba(57, 255, 20, 0.65)', 'rgba(255, 0, 127, 0.65)'],
-                        borderColor: ['#39ff14', '#ff007f'],
-                        borderWidth: 2
-                    }]
+                    labels: chartLabels,
+                    datasets: [
+                        {
+                            label: 'Success (Allowed)',
+                            data: allowedHistory,
+                            borderColor: '#39ff14',
+                            backgroundColor: 'rgba(57, 255, 20, 0.05)',
+                            borderWidth: 2.5,
+                            tension: 0.35,
+                            fill: true,
+                            pointRadius: 1
+                        },
+                        {
+                            label: 'Throttled (429)',
+                            data: blockedHistory,
+                            borderColor: '#ff007f',
+                            backgroundColor: 'rgba(255, 0, 127, 0.05)',
+                            borderWidth: 2.5,
+                            tension: 0.35,
+                            fill: true,
+                            pointRadius: 1
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                            labels: {
-                                color: '#9ca3af',
-                                font: {
-                                    family: 'Outfit',
-                                    size: 13
-                                }
-                            }
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#64748b' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.04)' },
+                            ticks: { 
+                                color: '#64748b',
+                                stepSize: 1,
+                                precision: 0
+                            },
+                            min: 0
                         }
                     },
-                    cutout: '70%'
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#94a3b8',
+                                font: { family: 'Outfit', size: 12 }
+                            }
+                        }
+                    }
                 }
             });
         }
 
-        // Fetch metrics
-        async function fetchMetrics() {
+        // Fetch configurations from backend
+        async function fetchConfigs() {
+            try {
+                const res = await fetch('/admin/config');
+                if (res.ok) {
+                    activeConfigs = await res.json();
+                    loadPathConfig(configPathSelect.value);
+                }
+            } catch (err) {
+                console.error("Failed to load configs from gateway", err);
+            }
+        }
+
+        // Load specific configuration limits to editor inputs
+        function loadPathConfig(path) {
+            const config = activeConfigs[path];
+            if (config && config.limits) {
+                limitAnon.value = config.limits.ANONYMOUS || 2;
+                valAnon.innerText = limitAnon.value;
+
+                limitStd.value = config.limits.STANDARD || 10;
+                valStd.innerText = limitStd.value;
+
+                limitPrem.value = config.limits.PREMIUM || 50;
+                valPrem.innerText = limitPrem.value;
+            }
+        }
+
+        configPathSelect.addEventListener('change', (e) => {
+            loadPathConfig(e.target.value);
+        });
+
+        // Save and publish rules to backend
+        saveConfigBtn.addEventListener('click', async () => {
+            const path = configPathSelect.value;
+            const payload = {
+                path: path,
+                windowMs: 60000,
+                limits: {
+                    ANONYMOUS: parseInt(limitAnon.value),
+                    STANDARD: parseInt(limitStd.value),
+                    PREMIUM: parseInt(limitPrem.value)
+                }
+            };
+
+            try {
+                const res = await fetch('/admin/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    showToast("Dynamic rules successfully broadcasted via Redis Pub/Sub!");
+                    // Refresh our local configs map
+                    fetchConfigs();
+                } else {
+                    showToast("Failed to publish rules.", true);
+                }
+            } catch (err) {
+                showToast("Network failure updating config rules.", true);
+            }
+        });
+
+        // Polling loop for updating telemetry cards & plotting traffic rates
+        async function pollTelemetry() {
             try {
                 const res = await fetch('/admin/metrics/dashboard');
                 if (res.ok) {
                     const data = await res.json();
                     
-                    // Update stats
+                    // Update header numbers
                     metricDau.innerText = data.unique_users;
                     metricAllowed.innerText = data.allowed_requests;
                     metricBlocked.innerText = data.blocked_requests;
 
-                    // Update Chart
-                    if (trafficChart) {
-                        const total = data.allowed_requests + data.blocked_requests;
-                        if (total === 0) {
-                            trafficChart.data.datasets[0].data = [1, 0]; // Default mock allowed state
-                        } else {
-                            trafficChart.data.datasets[0].data = [data.allowed_requests, data.blocked_requests];
-                        }
-                        trafficChart.update();
+                    // Calculate rates (incAllowed & incBlocked per interval)
+                    const incAllowed = (prevAllowed === 0) ? 0 : Math.max(0, data.allowed_requests - prevAllowed);
+                    const incBlocked = (prevBlocked === 0) ? 0 : Math.max(0, data.blocked_requests - prevBlocked);
+
+                    prevAllowed = data.allowed_requests;
+                    prevBlocked = data.blocked_requests;
+
+                    // Add to chart history
+                    allowedHistory.push(incAllowed);
+                    allowedHistory.shift();
+
+                    blockedHistory.push(incBlocked);
+                    blockedHistory.shift();
+
+                    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    chartLabels.push(nowStr);
+                    chartLabels.shift();
+
+                    if (lineChart) {
+                        lineChart.data.labels = chartLabels;
+                        lineChart.data.datasets[0].data = allowedHistory;
+                        lineChart.data.datasets[1].data = blockedHistory;
+                        lineChart.update();
                     }
                 }
             } catch (err) {
-                console.error("Failed to fetch dashboard metrics", err);
+                console.error("Failed polling dashboard telemetry", err);
             }
         }
 
-        // Send API Request Simulator
+        // Fire request simulator
         sendRequestBtn.addEventListener('click', async () => {
             const endpoint = endpointSelect.value;
             const headers = new Headers();
@@ -547,50 +853,50 @@
             }
 
             const method = endpoint === '/api/v1/profile' ? 'POST' : 'GET';
+            
             const logEntry = document.createElement('div');
             logEntry.classList.add('log-entry');
-
-            const timestamp = new Date().toLocaleTimeString();
-            logEntry.innerHTML = `<span style="color: #9ca3af;">[${timestamp}]</span> Dispatching Request: <strong>${method} ${endpoint}</strong><br>`;
+            const time = new Date().toLocaleTimeString();
+            logEntry.innerHTML = `<span style="color:#64748b;">[${time}]</span> Dispatching: <strong>${method} ${endpoint}</strong><br>`;
 
             try {
-                const startTime = performance.now();
+                const start = performance.now();
                 const res = await fetch(endpoint, { method, headers });
-                const duration = (performance.now() - startTime).toFixed(1);
-                
+                const dur = (performance.now() - start).toFixed(0);
                 const body = await res.json();
-                
+
                 if (res.status === 200) {
                     logEntry.classList.add('info');
-                    logEntry.innerHTML += `Status: <strong style="color:#10b981;">200 OK</strong> (${duration}ms)<br>Response: ${JSON.stringify(body)}`;
+                    logEntry.innerHTML += `Status: <strong style="color:var(--accent-green);">200 OK</strong> (${dur}ms)<br>Response: ${JSON.stringify(body)}`;
                 } else if (res.status === 429) {
                     logEntry.classList.add('error');
-                    const retryAfter = res.headers.get('Retry-After');
-                    logEntry.innerHTML += `Status: <strong style="color:#f43f5e;">429 Too Many Requests</strong> (${duration}ms)<br>Retry-After Header: <span style="text-decoration: underline;">${retryAfter}s</span><br>Response: ${JSON.stringify(body)}`;
+                    const retry = res.headers.get('Retry-After');
+                    logEntry.innerHTML += `Status: <strong style="color:var(--accent-red);">429 Too Many Requests</strong> (${dur}ms)<br>Retry-After Header: <span style="text-decoration: underline;">${retry}s</span><br>Response: ${JSON.stringify(body)}`;
                 } else {
                     logEntry.classList.add('error');
-                    logEntry.innerHTML += `Status: <strong>${res.status}</strong> (${duration}ms)<br>Response: ${JSON.stringify(body)}`;
+                    logEntry.innerHTML += `Status: <strong>${res.status}</strong> (${dur}ms)<br>Response: ${JSON.stringify(body)}`;
                 }
             } catch (err) {
                 logEntry.classList.add('error');
                 logEntry.innerHTML += `Network Failure: ${err.message}`;
             }
 
-            if (logConsole.innerHTML.trim() === '[Console ready to print traffic transactions...]') {
+            if (logConsole.innerHTML.trim() === '[Console ready to inspect transaction outputs...]') {
                 logConsole.innerHTML = '';
             }
             logConsole.prepend(logEntry);
 
-            // Fetch metrics immediately after request completes
-            fetchMetrics();
+            // Poll immediately on user action to capture spike
+            pollTelemetry();
         });
 
-        // Run setup
+        // Initialize Page
         initChart();
-        fetchMetrics();
-        
-        // Polling loop
-        setInterval(fetchMetrics, 3000);
+        fetchConfigs();
+        pollTelemetry();
+
+        // 3-second polling interval
+        setInterval(pollTelemetry, 3000);
     </script>
 </body>
 </html>

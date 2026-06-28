@@ -1,5 +1,6 @@
 package com.example.ratelimiter.interceptor;
 
+import com.example.ratelimiter.config.RateLimitConfigManager;
 import com.example.ratelimiter.config.RateLimitProperties;
 import com.example.ratelimiter.event.RequestAllowedEvent;
 import com.example.ratelimiter.event.RequestBlockedEvent;
@@ -14,7 +15,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.util.AntPathMatcher;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.io.PrintWriter;
@@ -29,18 +29,17 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final RedisScript<Long> rateLimitScript;
-    private final RateLimitProperties rateLimitProperties;
+    private final RateLimitConfigManager configManager;
     private final ApiKeyService apiKeyService;
     private final ApplicationEventPublisher eventPublisher;
     
-    private final AntPathMatcher pathMatcher = new AntPathMatcher();
     private final ConcurrentHashMap<String, ConcurrentSkipListSet<Long>> localCache = new ConcurrentHashMap<>();
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String requestUri = request.getRequestURI();
         
-        RateLimitProperties.RateLimitConfig config = findMatchingConfig(requestUri);
+        RateLimitProperties.RateLimitConfig config = configManager.getConfig(requestUri);
         if (config == null) {
             return true;
         }
@@ -118,18 +117,6 @@ public class RateLimitInterceptor implements HandlerInterceptor {
                 localCache.remove(key);
             }
         });
-    }
-
-    private RateLimitProperties.RateLimitConfig findMatchingConfig(String uri) {
-        if (rateLimitProperties.getConfigs() == null) {
-            return null;
-        }
-        for (RateLimitProperties.RateLimitConfig config : rateLimitProperties.getConfigs()) {
-            if (pathMatcher.match(config.getPath(), uri)) {
-                return config;
-            }
-        }
-        return null;
     }
 
     private String extractClientIp(HttpServletRequest request) {
