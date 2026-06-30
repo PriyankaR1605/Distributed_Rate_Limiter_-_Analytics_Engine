@@ -1,8 +1,10 @@
 package com.example.ratelimiter.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
 
@@ -15,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RateLimitConfigManager {
 
     private final RateLimitProperties rateLimitProperties;
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final ObjectMapper objectMapper;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
     private final Map<String, RateLimitProperties.RateLimitConfig> configMap = new ConcurrentHashMap<>();
 
@@ -25,7 +29,27 @@ public class RateLimitConfigManager {
             for (RateLimitProperties.RateLimitConfig config : rateLimitProperties.getConfigs()) {
                 configMap.put(config.getPath(), config);
             }
-            log.info("Initialized local rate limit configurations map: {}", configMap.keySet());
+            log.info("Initialized local rate limit configurations map from bootstrap properties: {}", configMap.keySet());
+        }
+
+        // Override with configurations saved in Redis if present
+        try {
+            if (redisTemplate.opsForHash() == null) {
+                log.warn("RedisTemplate.opsForHash() is null (possibly mock environment). Skipping Redis configurations load.");
+                return;
+            }
+            Map<Object, Object> redisConfigs = redisTemplate.opsForHash().entries("ratelimiter:configs");
+            if (redisConfigs != null && !redisConfigs.isEmpty()) {
+                for (Map.Entry<Object, Object> entry : redisConfigs.entrySet()) {
+                    String path = (String) entry.getKey();
+                    String jsonVal = (String) entry.getValue();
+                    RateLimitProperties.RateLimitConfig config = objectMapper.readValue(jsonVal, RateLimitProperties.RateLimitConfig.class);
+                    configMap.put(path, config);
+                }
+                log.info("Successfully loaded and overrode rate limit configurations from Redis: {}", redisConfigs.keySet());
+            }
+        } catch (Exception e) {
+            log.error("Failed to load rate limit configurations from Redis at startup. Falling back to bootstrap properties.", e);
         }
     }
 

@@ -2,6 +2,7 @@ package com.example.ratelimiter.controller;
 
 import com.example.ratelimiter.config.RateLimitConfigManager;
 import com.example.ratelimiter.config.RateLimitProperties;
+import com.example.ratelimiter.service.ApiKeyService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +10,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -34,6 +36,7 @@ public class AdminController {
     private final ChannelTopic configUpdateTopic;
     private final ObjectMapper objectMapper;
     private final RateLimitConfigManager configManager;
+    private final ApiKeyService apiKeyService;
     
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -126,13 +129,16 @@ public class AdminController {
             // Serialize update to JSON
             String jsonPayload = objectMapper.writeValueAsString(newConfig);
             
+            // Persist the update in Redis Hash
+            redisTemplate.opsForHash().put("ratelimiter:configs", newConfig.getPath(), jsonPayload);
+            
             // Publish message via Redis Pub/Sub topic to sync all application instances
             redisTemplate.convertAndSend(configUpdateTopic.getTopic(), jsonPayload);
             
-            log.info("Published rate limit config updates event for path: {}", newConfig.getPath());
+            log.info("Persisted in Redis and published rate limit config updates event for path: {}", newConfig.getPath());
             return ResponseEntity.ok(Map.of(
                     "status", "success",
-                    "message", "Configuration update event published successfully for path: " + newConfig.getPath()
+                    "message", "Configuration update persisted and event published successfully for path: " + newConfig.getPath()
             ));
         } catch (Exception e) {
             log.error("Failed to publish rate limit config update event", e);
@@ -140,6 +146,44 @@ public class AdminController {
                     "status", "error",
                     "message", "Failed to publish config update: " + e.getMessage()
             ));
+        }
+    }
+
+    @GetMapping("/keys")
+    public ResponseEntity<Map<String, String>> getApiKeys() {
+        return ResponseEntity.ok(apiKeyService.getAllKeys());
+    }
+
+    @PostMapping("/keys")
+    public ResponseEntity<Map<String, String>> registerApiKey(@RequestBody Map<String, String> payload) {
+        String key = payload.get("key");
+        String tierStr = payload.get("tier");
+        if (key == null || key.trim().isEmpty() || tierStr == null) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "Missing key or tier"));
+        }
+
+        try {
+            com.example.ratelimiter.model.UserTier tier = com.example.ratelimiter.model.UserTier.valueOf(tierStr.toUpperCase());
+            apiKeyService.registerKey(key, tier);
+            return ResponseEntity.ok(Map.of("status", "success", "message", "API key registered successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "Invalid tier name"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("status", "error", "message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/keys")
+    public ResponseEntity<Map<String, String>> revokeApiKey(@RequestParam("key") String key) {
+        if (key == null || key.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "Missing key parameter"));
+        }
+
+        try {
+            apiKeyService.revokeKey(key);
+            return ResponseEntity.ok(Map.of("status", "success", "message", "API key revoked successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("status", "error", "message", e.getMessage()));
         }
     }
 }

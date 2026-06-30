@@ -4,6 +4,7 @@ import com.example.ratelimiter.config.RateLimitConfigManager;
 import com.example.ratelimiter.config.RateLimitProperties;
 import com.example.ratelimiter.model.UserTier;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,11 +12,14 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -23,7 +27,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+@SpringBootTest(properties = "spring.data.redis.repositories.enabled=false")
 @AutoConfigureMockMvc
 public class RateLimiterApplicationTests {
 
@@ -39,15 +43,29 @@ public class RateLimiterApplicationTests {
     @MockBean
     private RedisScript<Long> rateLimitScript;
 
+    @MockBean
+    private org.springframework.data.redis.listener.RedisMessageListenerContainer redisMessageListenerContainer;
+
+    @BeforeEach
+    public void setUp() {
+        HashOperations<String, Object, Object> hashOperations = Mockito.mock(HashOperations.class);
+        Mockito.when(redisTemplate.opsForHash()).thenReturn(hashOperations);
+        Mockito.when(hashOperations.entries(any())).thenReturn(new HashMap<>());
+
+        org.springframework.data.redis.core.ValueOperations<String, Object> valueOperations = Mockito.mock(org.springframework.data.redis.core.ValueOperations.class);
+        Mockito.when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        org.springframework.data.redis.core.HyperLogLogOperations<String, Object> hllOperations = Mockito.mock(org.springframework.data.redis.core.HyperLogLogOperations.class);
+        Mockito.when(redisTemplate.opsForHyperLogLog()).thenReturn(hllOperations);
+    }
+
     @Test
     public void testAnonymousAccessAllowedAndBlocked() throws Exception {
         // Arrange: Redis returns 1 (Allowed) for first 2 requests, then 0 (Blocked) for 3rd request
         Mockito.when(redisTemplate.execute(
-                eq(rateLimitScript),
-                any(),
-                any(),
-                any(),
-                any()
+                any(RedisScript.class),
+                any(java.util.List.class),
+                any(Object[].class)
         )).thenReturn(1L).thenReturn(1L).thenReturn(0L);
 
         // Act & Assert
@@ -74,11 +92,9 @@ public class RateLimiterApplicationTests {
     public void testPremiumTierQuotas() throws Exception {
         // Arrange: Redis returns 1 (Allowed) for premium key requests
         Mockito.when(redisTemplate.execute(
-                eq(rateLimitScript),
-                any(),
-                any(),
-                any(),
-                any()
+                any(RedisScript.class),
+                any(java.util.List.class),
+                any(Object[].class)
         )).thenReturn(1L);
 
         // Act & Assert
@@ -92,11 +108,9 @@ public class RateLimiterApplicationTests {
     public void testRedisOutageFailoverToLocalLimiter() throws Exception {
         // Arrange: Simulate Redis connection outage by throwing an exception
         Mockito.when(redisTemplate.execute(
-                eq(rateLimitScript),
-                any(),
-                any(),
-                any(),
-                any()
+                any(RedisScript.class),
+                any(java.util.List.class),
+                any(Object[].class)
         )).thenThrow(new RedisConnectionFailureException("Redis connection refused"));
 
         // Act & Assert: Anonymous capacity on /api/v1/data is 2 requests/min

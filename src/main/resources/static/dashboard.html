@@ -453,6 +453,56 @@
             margin-top: auto;
             background: rgba(8, 12, 20, 0.5);
         }
+
+        /* API Key registry styles */
+        .key-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.65rem 0.85rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .key-row:last-child {
+            border-bottom: none;
+        }
+        .key-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .key-string {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+        }
+        .badge {
+            font-size: 0.7rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .badge.premium {
+            background: rgba(212, 175, 55, 0.15);
+            color: #d4af37;
+            border: 1px solid rgba(212, 175, 55, 0.3);
+        }
+        .badge.standard {
+            background: rgba(0, 240, 255, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(0, 240, 255, 0.3);
+        }
+        .revoke-link {
+            color: var(--accent-red);
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            transition: opacity 0.2s;
+        }
+        .revoke-link:hover {
+            opacity: 0.8;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -523,6 +573,35 @@
                         </div>
                         <div class="console" id="log-console">
 [Console ready to inspect transaction outputs...]
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Key Registry Panel -->
+                <div class="panel">
+                    <div class="panel-header" style="border-left-color: var(--accent-blue);">
+                        <div class="panel-title">Dynamic API Key Registry</div>
+                    </div>
+                    
+                    <div class="form-group" style="flex-direction: row; gap: 0.5rem; align-items: flex-end;">
+                        <div style="flex: 2; display: flex; flex-direction: column; gap: 0.5rem;">
+                            <label for="new-key-input">New API Key</label>
+                            <input type="text" id="new-key-input" placeholder="e.g. key_new_member">
+                        </div>
+                        <div style="flex: 1.2; display: flex; flex-direction: column; gap: 0.5rem;">
+                            <label for="new-key-tier">Tier</label>
+                            <select id="new-key-tier">
+                                <option value="STANDARD">STANDARD</option>
+                                <option value="PREMIUM">PREMIUM</option>
+                            </select>
+                        </div>
+                        <button class="btn" id="add-key-btn" style="height: 42px; padding: 0 1rem; margin-bottom: 0;">Add Key</button>
+                    </div>
+
+                    <div style="margin-top: 0.5rem;">
+                        <label>Active Keys</label>
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; max-height: 200px; overflow-y: auto; margin-top: 0.5rem;" id="keys-list-container">
+                            <!-- Populated dynamically -->
                         </div>
                     </div>
                 </div>
@@ -890,9 +969,161 @@
             pollTelemetry();
         });
 
+        const keysListContainer = document.getElementById('keys-list-container');
+        const newKeyInput = document.getElementById('new-key-input');
+        const newKeyTier = document.getElementById('new-key-tier');
+        const addKeyBtn = document.getElementById('add-key-btn');
+
+        let activeApiKeys = {};
+
+        // Fetch API keys from backend and update both key list and sandbox presets
+        async function fetchApiKeys() {
+            try {
+                const res = await fetch('/admin/keys');
+                if (res.ok) {
+                    activeApiKeys = await res.json();
+                    renderKeysList();
+                    renderSandboxPresets();
+                }
+            } catch (err) {
+                console.error("Failed to load API keys", err);
+            }
+        }
+
+        // Render the list of keys in the registry manager panel
+        function renderKeysList() {
+            keysListContainer.innerHTML = '';
+            const entries = Object.entries(activeApiKeys);
+            if (entries.length === 0) {
+                keysListContainer.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.82rem;">No API Keys registered.</div>';
+                return;
+            }
+
+            // Sort by tier, then key name
+            entries.sort((a, b) => b[1].localeCompare(a[1]) || a[0].localeCompare(b[0]));
+
+            entries.forEach(([key, tier]) => {
+                const row = document.createElement('div');
+                row.className = 'key-row';
+                
+                const badgeClass = tier.toLowerCase();
+                
+                row.innerHTML = `
+                    <div class="key-info">
+                        <span class="key-string">${key}</span>
+                        <span class="badge ${badgeClass}">${tier}</span>
+                    </div>
+                    <span class="revoke-link" data-key="${key}">Revoke</span>
+                `;
+                
+                // Add revoke listener
+                row.querySelector('.revoke-link').addEventListener('click', (e) => {
+                    const k = e.target.getAttribute('data-key');
+                    revokeApiKey(k);
+                });
+                
+                keysListContainer.appendChild(row);
+            });
+        }
+
+        // Dynamic Sandbox presets
+        function renderSandboxPresets() {
+            // Find current selection value so we don't lose it if it still exists
+            const selectedVal = selectedApiKey;
+            
+            // Clear presets except the core ones
+            const presetsContainer = document.getElementById('key-presets');
+            presetsContainer.innerHTML = '<div class="pill" data-val="">Anonymous (IP Limit)</div>';
+            
+            Object.entries(activeApiKeys).forEach(([key, tier]) => {
+                const pill = document.createElement('div');
+                pill.className = 'pill';
+                pill.setAttribute('data-val', key);
+                pill.innerText = `${tier === 'PREMIUM' ? '⭐' : '⚡'} ${key.substring(0, 16)}${key.length > 16 ? '...' : ''}`;
+                presetsContainer.appendChild(pill);
+            });
+            
+            // Add custom key pill
+            const customPill = document.createElement('div');
+            customPill.className = 'pill';
+            customPill.setAttribute('data-val', 'custom');
+            customPill.innerText = 'Custom Key...';
+            presetsContainer.appendChild(customPill);
+            
+            // Restore selection state
+            let found = false;
+            const pills = presetsContainer.querySelectorAll('.pill');
+            pills.forEach(p => {
+                if (p.getAttribute('data-val') === selectedVal) {
+                    p.classList.add('active');
+                    found = true;
+                }
+            });
+            
+            if (!found) {
+                // Default to anonymous
+                pills[0].classList.add('active');
+                selectedApiKey = '';
+                customKeyInput.style.display = 'none';
+            }
+        }
+
+        // Add Key
+        addKeyBtn.addEventListener('click', async () => {
+            const key = newKeyInput.value.trim();
+            const tier = newKeyTier.value;
+            if (!key) {
+                showToast("Please enter an API Key", true);
+                return;
+            }
+
+            try {
+                const res = await fetch('/admin/keys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key, tier })
+                });
+
+                if (res.ok) {
+                    showToast("API key registered successfully!");
+                    newKeyInput.value = '';
+                    fetchApiKeys();
+                } else {
+                    const data = await res.json();
+                    showToast(data.message || "Failed to register API key", true);
+                }
+            } catch (err) {
+                showToast("Network failure adding API key", true);
+            }
+        });
+
+        // Revoke Key
+        async function revokeApiKey(key) {
+            if (!confirm(`Are you sure you want to revoke API key: ${key}?`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/admin/keys?key=${encodeURIComponent(key)}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    showToast("API key revoked successfully!");
+                    fetchApiKeys();
+                } else {
+                    const data = await res.json();
+                    showToast(data.message || "Failed to revoke API key", true);
+                }
+            } catch (err) {
+                showToast("Network failure revoking API key", true);
+            }
+        }
+
         // Initialize Page
         initChart();
         fetchConfigs();
+        fetchApiKeys();
         pollTelemetry();
 
         // 3-second polling interval

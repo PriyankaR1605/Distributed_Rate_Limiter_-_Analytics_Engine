@@ -137,7 +137,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     }
 
     private void sendThrottledResponse(HttpServletResponse response, UserTier tier, int limit, long windowMs) throws Exception {
-        response.setStatus(HttpServletResponse.SC_TOO_MANY_REQUESTS);
+        response.setStatus(429);
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
         
